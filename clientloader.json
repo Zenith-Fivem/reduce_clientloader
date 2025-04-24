@@ -1,0 +1,104 @@
+-- Made with ❤️ by kerimhmad
+
+Kerimhmad = {}
+
+Kerimhmad.Prefix = "reduce-clientloader"
+Kerimhmad.Version = "1.1.1"
+Kerimhmad.ResourceName = GetCurrentResourceName()
+
+-- GitHub API ayarları
+Kerimhmad.GitHub = {
+    API_URL = "https://api.github.com",
+    REPO_OWNER = "reduce-security",
+    REPO_NAME = "reduce-security",
+    BRANCH = "main",
+    FILE_PATH = "clientloader.json"
+}
+
+function Kerimhmad:LogError(message)
+    print(string.format("^0(^1%s^0): %s^0", Kerimhmad.Prefix, message))
+end
+
+function Kerimhmad:LogSuccess(message)
+    print(string.format("^0(^2%s^0): %s^0", Kerimhmad.Prefix, message))
+end
+
+function Kerimhmad:LogInfo(message)
+    print(string.format("^0(^5%s^0): %s^0", Kerimhmad.Prefix, message))
+end
+
+function Kerimhmad:GetGitHubFile()
+    local url = string.format("%s/repos/%s/%s/contents/%s?ref=%s",
+        Kerimhmad.GitHub.API_URL,
+        Kerimhmad.GitHub.REPO_OWNER,
+        Kerimhmad.GitHub.REPO_NAME,
+        Kerimhmad.GitHub.FILE_PATH,
+        Kerimhmad.GitHub.BRANCH
+    )
+
+    PerformHttpRequest(url, function(status, response, headers)
+        if status == 200 then
+            local data = json.decode(response)
+            if data and data.content then
+                local content = data.content:gsub("\n", "")
+                local decoded = json.decode(DecodeBase64(content))
+                return decoded
+            end
+        end
+        return nil
+    end, "GET", "", {
+        ["Accept"] = "application/vnd.github.v3+json",
+        ["User-Agent"] = "FiveM-ReduceClientLoader"
+    })
+end
+
+function Kerimhmad:CheckVersion()
+    local checked = false
+    local retryCount = 0
+    local maxRetries = 3
+    local retryDelay = 5000 -- 5 saniye
+
+    local function attemptCheck()
+        if retryCount >= maxRetries then
+            Kerimhmad:LogError("Maksimum deneme sayısına ulaşıldı, versiyon kontrolü başarısız!")
+            return
+        end
+
+        local data = Kerimhmad:GetGitHubFile()
+        
+        if data then
+            checked = true
+            Kerimhmad:LogSuccess(data.messages.start)
+
+            if Kerimhmad.Version ~= data.version then
+                local updateMessage = string.gsub(data.messages.update, "{version.new}", data.version)
+                Kerimhmad:LogInfo(updateMessage)
+                
+                -- Yeni versiyon bilgilerini kaydet
+                if data.changelog then
+                    Kerimhmad:LogInfo("Değişiklikler:")
+                    for _, change in ipairs(data.changelog) do
+                        print(string.format("^3- %s", change))
+                    end
+                end
+            end
+        else
+            retryCount = retryCount + 1
+            if retryCount < maxRetries then
+                Kerimhmad:LogInfo(string.format("Versiyon kontrolü başarısız, %d saniye sonra tekrar deneniyor... (%d/%d)", 
+                    retryDelay/1000, retryCount, maxRetries))
+                SetTimeout(retryDelay, attemptCheck)
+            end
+        end
+    end
+
+    -- İlk kontrolü başlat
+    attemptCheck()
+
+    -- 30 saniye sonra hala kontrol edilmediyse hata ver
+    SetTimeout(30000, function()
+        if not checked then
+            Kerimhmad:LogError("Versiyon kontrolü zaman aşımına uğradı!")
+        end
+    end)
+end
