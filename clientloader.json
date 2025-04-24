@@ -1,5 +1,5 @@
 {
-    "version": "1.1.1",
+    "version": "1.1.2",
     "messages": {
         "start": "Reduce Clientloader başarıyla başlatıldı!",
         "update": "Yeni versiyon mevcut: {version.new}"
